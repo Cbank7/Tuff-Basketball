@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Tuff Basketball</title>
+<style>
+body{margin:0;background:#111;color:white;font-family:Arial;text-align:center}
+.screen{display:none}.active{display:block}
+button,select,input{padding:10px;margin:6px;font-size:16px}
+
+#game{position:relative;width:820px;height:440px;background:#c68642;margin:auto;border:4px solid white}
+#three{position:absolute;width:520px;height:260px;border:3px dashed rgba(255,255,255,.5);border-radius:50%;left:-260px;top:90px}
+#rim{position:absolute;top:70px;right:40px;width:60px;height:8px;background:red}
+
+.player{position:absolute;width:26px;height:60px}
+.head{width:18px;height:18px;background:#f1c27d;border-radius:50%;margin:auto}
+.body{width:26px;height:26px;background:inherit;margin:auto}
+.legs{width:26px;height:16px;background:#333;margin:auto}
+
+#p1{background:#1e90ff}
+#p2{background:#ff3b3b}
+
+#ball{position:absolute;width:14px;height:14px;background:orange;border-radius:50%}
+
+#hud{display:flex;justify-content:space-around;margin:10px}
+#pauseMenu{position:absolute;inset:0;background:rgba(0,0,0,.85);display:none;flex-direction:column;justify-content:center}
+
+#meter{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);width:200px;height:16px;border:2px solid white}
+#fill{height:100%;width:0;background:red}
+.green{background:lime}
+
+#feedback{
+  position:absolute;
+  font-size:20px;
+  font-weight:bold;
+  opacity:0;
+  transition:.5s;
+}
+</style>
+</head>
+
+<body>
+
+<div id="start" class="screen active">
+  <h1>🔥 TUFF BASKETBALL 🔥</h1>
+  <button onclick="show('settings')">Play</button>
+  <button onclick="show('controls')">Controls</button>
+</div>
+
+<div id="controls" class="screen">
+  <h2>Controls</h2>
+  <p><b>P1:</b> WASD Move | Space Shoot</p>
+  <p><b>P2:</b> Arrows Move | Enter Shoot</p>
+  <p><b>Game:</b> ESC Pause | T Timeout</p>
+  <button onclick="show('start')">Back</button>
+</div>
+
+<div id="settings" class="screen">
+  <h2>Settings</h2>
+  <select id="mode">
+    <option value="1">1 Player (AI)</option>
+    <option value="2">2 Player</option>
+  </select><br>
+  <select id="difficulty">
+    <option>Easy</option>
+    <option>Medium</option>
+    <option>Hard</option>
+  </select><br>
+  <select id="qtr">
+    <option value="120">2 Min Quarters</option>
+    <option value="300">5 Min Quarters</option>
+    <option value="480">8 Min Quarters</option>
+  </select><br>
+  <input id="code" placeholder="Secret Code"><br>
+  <button onclick="startGame()">Start Game</button>
+</div>
+
+<div id="gameScreen" class="screen">
+  <div id="hud">
+    <div id="clock"></div>
+    <div id="score"></div>
+    <div id="timeouts"></div>
+  </div>
+
+  <div id="game">
+    <div id="three"></div>
+    <div id="rim"></div>
+
+    <div id="p1" class="player">
+      <div class="head"></div><div class="body"></div><div class="legs"></div>
+    </div>
+
+    <div id="p2" class="player">
+      <div class="head"></div><div class="body"></div><div class="legs"></div>
+    </div>
+
+    <div id="ball"></div>
+    <div id="meter"><div id="fill"></div></div>
+    <div id="feedback"></div>
+
+    <div id="pauseMenu">
+      <h2>Paused</h2>
+      <button onclick="resume()">Continue</button>
+      <button onclick="showStats()">Stats</button>
+      <button onclick="location.reload()">Exit</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let screens={start,settings,controls,gameScreen}
+function show(s){Object.values(screens).forEach(x=>x.classList.remove("active"));screens[s].classList.add("active")}
+
+let p1={x:120,y:300,score:0},p2={x:600,y:300,score:0}
+let ball={x:140,y:300,vx:0,vy:0,shot:false}
+let qtrLen,timeLeft,quarter=1,paused=false,mode,diff,timeouts
+let meter=0,meterInt,alwaysGreen=false
+
+function startGame(){
+  mode=mode.value
+  diff=difficulty.value
+  qtrLen=parseInt(qtr.value)
+  timeLeft=qtrLen
+  timeouts=qtrLen>=300?3:2
+  alwaysGreen=code.value==="C7392"
+  show("gameScreen")
+  startClock()
+  gameLoop()
+}
+
+function startClock(){
+  setInterval(()=>{
+    if(paused) return
+    timeLeft--
+    clock.textContent=`Q${quarter} ${Math.floor(timeLeft/60)}:${String(timeLeft%60).padStart(2,"0")}`
+    score.textContent=`${p1.score} - ${p2.score}`
+    timeoutsEl.textContent=`TO: ${timeouts}`
+  },1000)
+}
+
+function gameLoop(){
+  setInterval(()=>{
+    if(paused) return
+    if(mode==1) aiMove()
+    updatePos()
+  },30)
+}
+
+function aiMove(){
+  let s=diff=="Easy"?1:diff=="Medium"?2:3
+  p2.x+=Math.sign(ball.x-p2.x)*s
+  if(Math.random()<0.01) releaseShot(2,true)
+}
+
+document.addEventListener("keydown",e=>{
+  if(e.key=="Escape") togglePause()
+  if(e.key=="t"&&timeouts>0){timeouts--;paused=true}
+  if(e.key==" "&&!meterInt) startMeter(1)
+  if(e.key=="Enter"&&!meterInt) startMeter(2)
+
+  if(e.key=="w") p1.y-=3
+  if(e.key=="s") p1.y+=3
+  if(e.key=="a") p1.x-=3
+  if(e.key=="d") p1.x+=3
+
+  if(mode==2){
+    if(e.key=="ArrowUp") p2.y-=3
+    if(e.key=="ArrowDown") p2.y+=3
+    if(e.key=="ArrowLeft") p2.x-=3
+    if(e.key=="ArrowRight") p2.x+=3
+  }
+})
+
+document.addEventListener("keyup",e=>{
+  if(e.key==" ") releaseShot(1)
+  if(e.key=="Enter") releaseShot(2)
+})
+
+function startMeter(){
+  meter=0;fill.style.width="0%";fill.classList.remove("green")
+  meterInt=setInterval(()=>{
+    meter+=2;fill.style.width=meter+"%"
+    if(meter>45&&meter<55) fill.classList.add("green")
+    if(meter>=100) clearInterval(meterInt)
+  },20)
+}
+
+function releaseShot(player,ai=false){
+  if(!meterInt&&!ai) return
+  clearInterval(meterInt);meterInt=null
+  let green=alwaysGreen||(meter>45&&meter<55)
+  showFeedback(green?"GREEN":meter<45?"EARLY":"LATE",player)
+  shoot(player,green)
+}
+
+function shoot(player,green){
+  if(ball.shot) return
+  let s=player==1?p1:p2
+  ball.x=s.x;ball.y=s.y;ball.vx=6;ball.vy=-8;ball.shot=true
+
+  let shot=setInterval(()=>{
+    ball.x+=ball.vx;ball.y+=ball.vy;ball.vy+=0.4
+    let dist=Math.hypot(ball.x-410,ball.y-220)
+    let pts=dist>240?3:2
+    if(ball.x>740&&ball.y<120&&green){
+      s.score+=pts;clearInterval(shot);ball.shot=false
+    }
+    if(ball.y>440){clearInterval(shot);ball.shot=false}
+  },20)
+}
+
+function showFeedback(text,player){
+  feedback.textContent=text
+  feedback.style.left=(player==1?p1.x:p2.x)+"px"
+  feedback.style.top=(player==1?p1.y:p2.y)-20+"px"
+  feedback.style.opacity=1
+  setTimeout(()=>feedback.style.opacity=0,600)
+}
+
+function updatePos(){
+  p1.style.left=p1.x+"px";p1.style.top=p1.y+"px"
+  p2.style.left=p2.x+"px";p2.style.top=p2.y+"px"
+  ballEl.style.left=ball.x+"px";ballEl.style.top=ball.y+"px"
+}
+
+function togglePause(){paused=!paused;pauseMenu.style.display=paused?"flex":"none"}
+function resume(){paused=false;pauseMenu.style.display="none"}
+function showStats(){alert(`P1: ${p1.score}\nP2: ${p2.score}`)}
+</script>
+</body>
+</html>
